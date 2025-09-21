@@ -241,5 +241,12 @@
 1) manifest.webmanifest を作成し、上の <link rel="manifest"> を有効化
 2) sw.js を用意して navigator.serviceWorker.register('./sw.js') を追加
 -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(console.error);
+    });
+  }
+</script>
 </body>
 </html>
