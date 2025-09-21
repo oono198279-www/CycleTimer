@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
+<title>CycleTimer — ラップでCT予測</title>
+
+<!-- ★ 後でPWA化するときに有効化
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0b0f12">
+-->
+
+<style>
+  :root{
+    --bg:#0b0f12; --card:#11161a; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#22c55e;
+    --radius:14px; --pad:14px; --gap:12px; --mono: ui-monospace,SFMono-Regular,Menlo,Consolas,"Roboto Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+  .wrap{max-width:880px; margin:0 auto; padding:18px}
+  header{position:sticky; top:0; background:linear-gradient(180deg, rgba(11,15,18,.98), rgba(11,15,18,.8) 60%, transparent); backdrop-filter: blur(6px); z-index:5}
+  h1{margin:8px 0 14px; font-size:20px; letter-spacing:.02em}
+  .grid{display:grid; grid-template-columns: 1fr; gap:var(--gap)}
+  @media(min-width:820px){ .grid{ grid-template-columns: 1.1fr .9fr } }
+
+  .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:var(--pad)}
+  .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .grow{flex:1}
+  .muted{color:var(--muted)}
+  .big{font-size:48px; font-family:var(--mono); letter-spacing:.03em}
+  .time{font-variant-numeric:tabular-nums}
+  .sub{font-size:14px}
+  .kpis{display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-top:10px}
+  .kpi{background:#0d1317; border:1px solid var(--border); border-radius:12px; padding:10px}
+  .kpi .label{color:var(--muted); font-size:12px}
+  .kpi .val{font-family:var(--mono); font-size:18px; margin-top:4px}
+
+  button{appearance:none; border:1px solid var(--border); background:#0e1418; color:#e5e7eb; padding:12px 10px; border-radius:12px; cursor:pointer; font-weight:600; font-size:16px}
+  button:active{transform:translateY(1px)}
+  .primary{background:var(--accent); color:#052b18; border-color:#0e3f28}
+  .warn{background:#ef4444; border-color:#7f1d1d; color:#330707}
+  .ghost{background:#0e1418}
+
+  /* ボタン列（均等幅） */
+  .btn-row{display:flex; gap:10px; margin-top:10px}
+  .btn-row button{flex:1; text-align:center}
+
+  /* iPhoneの入力時ズーム対策：font-size>=16px */
+  input[type="number"], input[type="text"]{
+    width:100%; background:#0e1418; color:var(--fg); border:1px solid var(--border);
+    padding:10px 12px; border-radius:10px; font-family:var(--mono); font-size:16px;
+  }
+  input[type="checkbox"]{transform:scale(1.2)}
+  label{user-select:none}
+
+  table{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-family:var(--mono)}
+  th,td{padding:8px 10px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap}
+  th:first-child, td:first-child{text-align:left}
+  .best{color:#22c55e}
+  .worst{color:#ef4444}
+
+  footer{margin:20px 0 10px; color:var(--muted); font-size:12px}
+
+  /* ---- 印刷用（PDF保存時） ---- */
+  @media print {
+    header { position: static; background: transparent; }
+    .wrap { padding: 0 10mm; }
+    .card { border: 1px solid #ccc; background: #fff; color:#000; }
+    body { background: #fff; color:#000; }
+    #lapsTbl { page-break-inside: auto; }
+    #lapsTbl tr { page-break-inside: avoid; page-break-after: auto; }
+    .scroll-print { max-height: none !important; overflow: visible !important; }
+    #startStop, #lapBtn, #undoBtn, #resetBtn, #printBtn { display:none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>CycleTimer — ラップでサイクルタイム予測</h1>
+    </header>
+
+    <div class="grid">
+      <!-- 左：計測＆表示 -->
+      <section class="card">
+        <div class="row">
+          <div class="big time" id="display">0'00"00</div>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <label class="row" style="gap:8px"><span>Target（目標回数）</span>
+            <input id="target" type="number" inputmode="numeric" pattern="\\d*" min="0" step="1" value="100" style="width:140px">
+          </label>
+          <div class="grow"></div>
+          <label class="row" style="gap:8px"><input type="checkbox" id="trimOutliers">
+            <span class="muted">外れ値を自動除外（IQR方式）</span>
+          </label>
+        </div>
+
+        <!-- 1段目：現在回数／平均CT -->
+        <div class="kpis">
+          <div class="kpi"><div class="label">現在回数</div><div class="val" id="count">0</div></div>
+          <div class="kpi"><div class="label">平均CT</div><div class="val time" id="avg">–</div></div>
+        </div>
+
+        <!-- 2段目：合計の到達予測時間（目標回数 × 平均CT） -->
+        <div class="kpis">
+          <div class="kpi" style="grid-column: span 2;">
+            <div class="label">目標回数までの到達予測時間（合計）</div>
+            <div class="val time" id="etaTotal">–</div>
+          </div>
+        </div>
+
+        <!-- 3段目：最短／最長 -->
+        <div class="kpis">
+          <div class="kpi"><div class="label">最短CT</div><div class="val time" id="min">–</div></div>
+          <div class="kpi"><div class="label">最長CT</div><div class="val time" id="max">–</div></div>
+        </div>
+
+        <!-- ★ 操作ボタン列（Start・Resetの順に変更 / Lapは右端） -->
+        <div class="btn-row">
+          <button id="startStop" class="primary">Start</button>
+          <button id="resetBtn" class="warn">Reset</button>
+          <button id="undoBtn" class="ghost" disabled>Undo</button>
+          <button id="lapBtn" disabled>Lap</button>
+        </div>
+
+        <div class="row" style="margin-top:10px">
+          <button id="printBtn" class="ghost">Print (PDF保存)</button>
+          <div class="grow"></div>
+        </div>
+      </section>
+
+      <!-- 右：ラップ一覧 -->
+      <section class="card">
+        <div class="row">
+          <h3 style="margin:0">ラップ一覧</h3>
+          <div class="grow"></div>
+          <span class="muted" id="hint">ラップはここに表示されます</span>
+        </div>
+        <div class="scroll-print" style="overflow:auto; max-height:55vh; margin-top:8px">
+          <table id="lapsTbl">
+            <thead><tr><th>#</th><th>Lap</th><th>Cumulative</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <footer>
+      設計方針：まずブラウザ版 → 後で <code>manifest.webmanifest</code> と <code>sw.js</code> を追加してPWA化。<br>
+      ショートカット：<b>S</b> 開始/停止・<b>L</b> ラップ・<b>U</b> 取り消し・<b>R</b> リセット
+    </footer>
+  </div>
+
+<script>
+(() => {
+  const state = { running:false, startEpoch:0, accMs:0, lastLapEpoch:0, laps:[], target:100, trimOutliers:false };
+
+  const $ = s => document.querySelector(s);
+  const display=$('#display'), startStop=$('#startStop'), lapBtn=$('#lapBtn'), undoBtn=$('#undoBtn'), resetBtn=$('#resetBtn');
+  const targetInp=$('#target'), trimChk=$('#trimOutliers'), countEl=$('#count'), avgEl=$('#avg'), minEl=$('#min'), maxEl=$('#max'), etaTotalEl=$('#etaTotal');
+  const tblBody=$('#lapsTbl tbody'), hint=$('#hint'), printBtn=$('#printBtn');
+
+  const pad=(n,w=2)=>String(n).padStart(w,'0');
+  // h:mm'ss"cc（h=0は省略）
+  const fmtHMSms = ms => {
+    if (!isFinite(ms) || ms < 0) ms = 0;
+    const totalCs=Math.floor(ms/10), cs=totalCs%100, totalSec=Math.floor(totalCs/100);
+    const s=totalSec%60, totalMin=Math.floor(totalSec/60), m=totalMin%60, h=Math.floor(totalMin/60);
+    const hPart=h>0?`${h}:`:'', mPart=h>0?pad(m,2):String(m), sPart=pad(s,2), csPart=pad(cs,2);
+    return `${hPart}${mPart}'${sPart}"${csPart}`;
+  };
+  const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
+  const iqrTrim=a=>{
+    if(a.length<4) return a.slice();
+    const s=a.slice().sort((x,y)=>x-y), q=p=>{const pos=(s.length-1)*p,b=Math.floor(pos),r=pos-b;return s[b]+(s[b+1]-s[b])*(r||0);};
+    const q1=q(0.25), q3=q(0.75), i=q3-q1, lo=q1-1.5*i, hi=q3+1.5*i;
+    return s.filter(v=>v>=lo&&v<=hi);
+  };
+  const now=()=>Date.now();
+
+  const KEY='cycletimer:v6';
+  const save=()=>localStorage.setItem(KEY, JSON.stringify({
+    running:state.running, accMs:state.accMs+(state.running?now()-state.startEpoch:0),
+    laps:state.laps, target:state.target, trimOutliers:state.trimOutliers
+  }));
+  const load=()=>{ const raw=localStorage.getItem(KEY); if(!raw) return;
+    try{ const o=JSON.parse(raw); state.running=false; state.accMs=o.accMs||0; state.laps=Array.isArray(o.laps)?o.laps:[]; state.target=Number.isFinite(o.target)?o.target:100; state.trimOutliers=!!o.trimOutliers; }catch{} };
+
+  const render=()=>{
+    const liveMs=state.accMs+(state.running?now()-state.startEpoch:0); display.textContent=fmtHMSms(liveMs);
+
+    tblBody.innerHTML=''; let cum=0;
+    const min=Math.min(...(state.laps.length?state.laps:[NaN])), max=Math.max(...(state.laps.length?state.laps:[NaN]));
+    state.laps.forEach((lap,i)=>{ cum+=lap; const tr=document.createElement('tr'); const cls=lap===min?'best':lap===max?'worst':''; tr.innerHTML=`<td>#${i+1}</td><td class="${cls}">${fmtHMSms(lap)}</td><td>${fmtHMSms(cum)}</td>`; tblBody.appendChild(tr); });
+    hint.style.display=state.laps.length?'none':'inline';
+
+    const lapsForAvg=state.trimOutliers?iqrTrim(state.laps):state.laps; const avg=mean(lapsForAvg);
+    countEl.textContent=state.laps.length; avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';
+    minEl.textContent=isFinite(min)?fmtHMSms(min):'–'; maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';
+    etaTotalEl.textContent=(isFinite(avg)&&Number.isFinite(state.target))?fmtHMSms(avg*(state.target|0)):'–';
+
+    startStop.textContent=state.running?'Stop':'Start';
+    lapBtn.disabled=!state.running; undoBtn.disabled=state.laps.length===0; targetInp.value=state.target; trimChk.checked=state.trimOutliers;
+  };
+
+  const start=()=>{ if(state.running) return; state.running=true; state.startEpoch=now(); state.lastLapEpoch=state.startEpoch; save(); render(); };
+  const stop =()=>{ if(!state.running) return; state.accMs+=now()-state.startEpoch; state.running=false; state.startEpoch=0; save(); render(); };
+  const toggle=()=>state.running?stop():start();
+  const lap  =()=>{ if(!state.running) return; const t=now(); const ms=t-state.lastLapEpoch; state.lastLapEpoch=t; state.laps.push(ms); save(); render(); };
+  const undo =()=>{ if(!state.laps.length) return; state.laps.pop(); save(); render(); };
+  const reset=()=>{ stop(); state.accMs=0; state.lastLapEpoch=0; state.laps=[]; save(); render(); };
+
+  startStop.addEventListener('click', toggle);
+  lapBtn.addEventListener('click', lap);
+  undoBtn.addEventListener('click', undo);
+  resetBtn.addEventListener('click', reset);
+  targetInp.addEventListener('input', e=>{ state.target=Math.max(0, e.target.value|0); save(); render(); });
+  trimChk.addEventListener('change', e=>{ state.trimOutliers=!!e.target.checked; save(); render(); });
+  printBtn.addEventListener('click', ()=>window.print());
+
+  window.addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); if(k==='s') toggle(); else if(k==='l') lap(); else if(k==='u') undo(); else if(k==='r') reset(); });
+
+  setInterval(()=>{ if(state.running) render(); }, 50);
+  load(); render();
+})();
+</script>
+
+<!-- ★ 後でPWA化：
+1) manifest.webmanifest を作成し、上の <link rel="manifest"> を有効化
+2) sw.js を用意して navigator.serviceWorker.register('./sw.js') を追加
+-->
+</body>
+</html>
