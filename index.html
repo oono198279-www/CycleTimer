@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
 <title>CycleTimer — ラップでCT予測</title>
 
-<!-- PWA化するなら有効化 -->
-<!-- <link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#0b0f12"> -->
-
 <style>
   :root{
     --bg:#0b0f12; --card:#11161a; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#22c55e;
@@ -24,11 +21,12 @@
 
   .card{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:var(--pad)}
   .row{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+  .nowrap{flex-wrap:nowrap !important}
+  .checkbox-line{display:flex; align-items:center; gap:8px; white-space:nowrap}
   .grow{flex:1}
   .muted{color:var(--muted)}
   .big{font-size:48px; font-family:var(--mono); letter-spacing:.03em}
   .time{font-variant-numeric:tabular-nums}
-  .sub{font-size:14px}
   .kpis{display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-top:10px}
   .kpi{background:#0d1317; border:1px solid var(--border); border-radius:12px; padding:10px}
   .kpi .label{color:var(--muted); font-size:12px}
@@ -43,78 +41,32 @@
   .btn-row{display:flex; gap:10px; margin-top:10px}
   .btn-row button{flex:1; text-align:center}
 
-  /* iPhoneの入力時ズーム対策 */
-  input[type="number"], input[type="text"]{
-    width:100%; background:#0e1418; color:var(--fg); border:1px solid var(--border);
+  input[type="number"]{
+    width:140px; background:#0e1418; color:var(--fg); border:1px solid var(--border);
     padding:10px 12px; border-radius:10px; font-family:var(--mono); font-size:16px;
   }
   input[type="checkbox"]{transform:scale(1.2)}
-  label{user-select:none}
-
-  table{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-family:var(--mono)}
-  th,td{padding:8px 10px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap}
-  th:first-child, td:first-child{text-align:left}
-  .best{color:#22c55e}
-  .worst{color:#ef4444}
-
-  footer{margin:20px 0 10px; color:var(--muted); font-size:12px}
-
-  /* --- 画面/印刷切替のためのユーティリティ --- */
-  .print-only{display:none}
-  .screen-only{display:inline}
-
-  /* ===== 印刷モード：印刷直前だけ JS で body に付与 ===== */
-  body.print-mode{
-    --bg:#ffffff; --card:#ffffff; --fg:#000000; --muted:#222; --border:#bbbbbb;
-    background:#fff !important; color:#000 !important;
-  }
-  body.print-mode header{position:static; background:transparent}
-  body.print-mode .card{background:#fff !important; color:#000 !important; border:1px solid #bbb !important}
-  body.print-mode .kpi{background:#fff !important; color:#000 !important; border:1px solid #bbb !important}
-  body.print-mode .kpi .label, body.print-mode .kpi .val{color:#000 !important}
-  body.print-mode table, body.print-mode th, body.print-mode td{color:#000 !important; border-color:#bbb !important}
-  body.print-mode .best{color:#0a7d28 !important}
-  body.print-mode .worst{color:#a31212 !important}
-  /* ラップ一覧は印刷時は全展開 */
-  body.print-mode .scroll-print{max-height:none !important; overflow:visible !important}
-  /* 画面の操作ボタンは印刷に出さない */
-  body.print-mode #startStop,
-  body.print-mode #lapBtn,
-  body.print-mode #undoBtn,
-  body.print-mode #resetBtn,
-  body.print-mode #printBtn{display:none !important}
-
-  /* フォームを隠し、値だけ見せる */
-  body.print-mode .screen-only{display:none !important}
-  body.print-mode .print-only{display:inline !important}
 </style>
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <h1>CycleTimer — ラップでサイクルタイム予測</h1>
-    </header>
+    <header><h1>CycleTimer — ラップでサイクルタイム予測</h1></header>
 
     <div class="grid">
       <section class="card">
         <div class="row"><div class="big time" id="display">0'00"00</div></div>
 
-        <div class="row" style="margin-top:10px">
-          <label class="row" style="gap:8px">
+        <!-- Target 行とチェック行を nowrap 固定 -->
+        <div class="row nowrap" style="margin-top:10px">
+          <label class="row nowrap" style="gap:8px">
             <span>Target（目標回数）</span>
-            <!-- 画面用 -->
-            <input id="target" class="screen-only" type="number" inputmode="numeric" pattern="\\d*" min="0" step="1" value="100" style="width:140px">
-            <!-- 印刷用（値だけ） -->
-            <span id="targetPrint" class="print-only" style="font-family:var(--mono); padding:8px 10px; border:1px solid #bbb; border-radius:8px;">100</span>
+            <input id="target" type="number" inputmode="numeric" min="0" step="1" value="100">
           </label>
           <div class="grow"></div>
-          <!-- 画面用チェック -->
-          <label class="row screen-only" style="gap:8px">
+          <label class="checkbox-line">
             <input type="checkbox" id="trimOutliers">
             <span class="muted">外れ値を自動除外（IQR方式）</span>
           </label>
-          <!-- 印刷用テキスト -->
-          <span class="print-only" id="trimPrint">外れ値を自動除外：<strong id="trimPrintVal">いいえ</strong></span>
         </div>
 
         <div class="kpis">
@@ -140,19 +92,13 @@
           <button id="undoBtn" class="ghost" disabled>Undo</button>
           <button id="lapBtn" disabled>Lap</button>
         </div>
-
         <div class="row" style="margin-top:10px">
           <button id="printBtn" class="ghost">Print (PDF保存)</button>
-          <div class="grow"></div>
         </div>
       </section>
 
       <section class="card">
-        <div class="row">
-          <h3 style="margin:0">ラップ一覧</h3>
-          <div class="grow"></div>
-          <span class="muted" id="hint">ラップはここに表示されます</span>
-        </div>
+        <h3 style="margin:0">ラップ一覧</h3>
         <div class="scroll-print" style="overflow:auto; max-height:55vh; margin-top:8px">
           <table id="lapsTbl">
             <thead><tr><th>#</th><th>Lap</th><th>Cumulative</th></tr></thead>
@@ -161,94 +107,30 @@
         </div>
       </section>
     </div>
-
-    <footer>
-      設計方針：まずブラウザ版 → 後で <code>manifest.webmanifest</code> と <code>sw.js</code> を追加してPWA化。<br>
-      ショートカット：<b>S</b> 開始/停止・<b>L</b> ラップ・<b>U</b> 取り消し・<b>R</b> リセット
-    </footer>
   </div>
 
 <script>
 (() => {
-  const state = { running:false, startEpoch:0, accMs:0, lastLapEpoch:0, laps:[], target:100, trimOutliers:false };
-
-  const $ = s => document.querySelector(s);
-  const display=$('#display'), startStop=$('#startStop'), lapBtn=$('#lapBtn'), undoBtn=$('#undoBtn'), resetBtn=$('#resetBtn');
-  const targetInp=$('#target'), trimChk=$('#trimOutliers');
-  const countEl=$('#count'), avgEl=$('#avg'), minEl=$('#min'), maxEl=$('#max'), etaTotalEl=$('#etaTotal');
-  const tblBody=$('#lapsTbl tbody'), hint=$('#hint'), printBtn=$('#printBtn');
-  const targetPrint=$('#targetPrint'), trimPrintVal=$('#trimPrintVal');
-
+  const state={running:false,startEpoch:0,accMs:0,lastLapEpoch:0,laps:[],target:100,trimOutliers:false};
+  const $=s=>document.querySelector(s);
+  const display=$('#display'),startStop=$('#startStop'),lapBtn=$('#lapBtn'),
+        undoBtn=$('#undoBtn'),resetBtn=$('#resetBtn'),targetInp=$('#target'),
+        trimChk=$('#trimOutliers'),countEl=$('#count'),avgEl=$('#avg'),
+        minEl=$('#min'),maxEl=$('#max'),etaTotalEl=$('#etaTotal'),tblBody=$('#lapsTbl tbody');
   const pad=(n,w=2)=>String(n).padStart(w,'0');
-  const fmtHMSms = ms => {
-    if (!isFinite(ms) || ms < 0) ms = 0;
-    const totalCs=Math.floor(ms/10), cs=totalCs%100, totalSec=Math.floor(totalCs/100);
-    const s=totalSec%60, totalMin=Math.floor(totalSec/60), m=totalMin%60, h=Math.floor(totalMin/60);
-    const hPart=h>0?`${h}:`:'', mPart=h>0?pad(m,2):String(m), sPart=pad(s,2), csPart=pad(cs,2);
-    return `${hPart}${mPart}'${sPart}"${csPart}`;
-  };
+  const fmtHMSms=ms=>{if(!isFinite(ms)||ms<0)ms=0;const totalCs=Math.floor(ms/10),cs=totalCs%100,totalSec=Math.floor(totalCs/100);const s=totalSec%60,m=Math.floor(totalSec/60)%60,h=Math.floor(totalSec/3600);return (h>0?`${h}:`:'')+ (h>0?pad(m):m)+"'"+pad(s)+'"'+pad(cs);};
   const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
-  const iqrTrim=a=>{
-    if(a.length<4) return a.slice();
-    const s=a.slice().sort((x,y)=>x-y), q=p=>{const pos=(s.length-1)*p,b=Math.floor(pos),r=pos-b;return s[b]+(s[b+1]-s[b])*(r||0);};
-    const q1=q(0.25), q3=q(0.75), i=q3-q1, lo=q1-1.5*i, hi=q3+1.5*i;
-    return s.filter(v=>v>=lo&&v<=hi);
-  };
   const now=()=>Date.now();
-
-  const KEY='cycletimer:v7';
-  const save=()=>localStorage.setItem(KEY, JSON.stringify({
-    running:state.running, accMs:state.accMs+(state.running?now()-state.startEpoch:0),
-    laps:state.laps, target:state.target, trimOutliers:state.trimOutliers
-  }));
-  const load=()=>{ const raw=localStorage.getItem(KEY); if(!raw) return;
-    try{ const o=JSON.parse(raw); state.running=false; state.accMs=o.accMs||0; state.laps=Array.isArray(o.laps)?o.laps:[]; state.target=Number.isFinite(o.target)?o.target:100; state.trimOutliers=!!o.trimOutliers; }catch{} };
-
-  const render=()=>{
-    const liveMs=state.accMs+(state.running?now()-state.startEpoch:0); display.textContent=fmtHMSms(liveMs);
-
-    tblBody.innerHTML=''; let cum=0;
-    const min=Math.min(...(state.laps.length?state.laps:[NaN])), max=Math.max(...(state.laps.length?state.laps:[NaN]));
-    state.laps.forEach((lap,i)=>{ cum+=lap; const tr=document.createElement('tr'); const cls=lap===min?'best':lap===max?'worst':''; tr.innerHTML=`<td>#${i+1}</td><td class="${cls}">${fmtHMSms(lap)}</td><td>${fmtHMSms(cum)}</td>`; tblBody.appendChild(tr); });
-    hint.style.display=state.laps.length?'none':'inline';
-
-    const lapsForAvg=state.trimOutliers?iqrTrim(state.laps):state.laps; const avg=mean(lapsForAvg);
-    countEl.textContent=state.laps.length; avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';
-    minEl.textContent=isFinite(min)?fmtHMSms(min):'–'; maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';
-    etaTotalEl.textContent=(isFinite(avg)&&Number.isFinite(state.target))?fmtHMSms(avg*(state.target|0)):'–';
-
-    startStop.textContent=state.running?'Stop':'Start';
-    lapBtn.disabled=!state.running; undoBtn.disabled=state.laps.length===0;
-    if(targetInp) targetInp.value=state.target; if(trimChk) trimChk.checked=state.trimOutliers;
-
-    // 印刷用値に同期
-    if (targetPrint) targetPrint.textContent = String(state.target);
-    if (trimPrintVal) trimPrintVal.textContent = state.trimOutliers ? 'はい' : 'いいえ';
-  };
-
-  const start=()=>{ if(state.running) return; state.running=true; state.startEpoch=now(); state.lastLapEpoch=state.startEpoch; save(); render(); };
-  const stop =()=>{ if(!state.running) return; state.accMs+=now()-state.startEpoch; state.running=false; state.startEpoch=0; save(); render(); };
+  const render=()=>{const live=state.accMs+(state.running?now()-state.startEpoch:0);display.textContent=fmtHMSms(live);tblBody.innerHTML='';let cum=0;const min=Math.min(...(state.laps.length?state.laps:[NaN])),max=Math.max(...(state.laps.length?state.laps:[NaN]));state.laps.forEach((lap,i)=>{cum+=lap;const tr=document.createElement('tr');tr.innerHTML=`<td>#${i+1}</td><td>${fmtHMSms(lap)}</td><td>${fmtHMSms(cum)}</td>`;tblBody.appendChild(tr)});const avg=mean(state.laps);countEl.textContent=state.laps.length;avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';minEl.textContent=isFinite(min)?fmtHMSms(min):'–';maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';etaTotalEl.textContent=isFinite(avg)?fmtHMSms(avg*state.target):'–';startStop.textContent=state.running?'Stop':'Start';lapBtn.disabled=!state.running;undoBtn.disabled=!state.laps.length;targetInp.value=state.target;trimChk.checked=state.trimOutliers;};
+  const start=()=>{if(state.running)return;state.running=true;state.startEpoch=now();state.lastLapEpoch=state.startEpoch;render();};
+  const stop=()=>{if(!state.running)return;state.accMs+=now()-state.startEpoch;state.running=false;render();};
   const toggle=()=>state.running?stop():start();
-  const lap  =()=>{ if(!state.running) return; const t=now(); const ms=t-state.lastLapEpoch; state.lastLapEpoch=t; state.laps.push(ms); save(); render(); };
-  const undo =()=>{ if(!state.laps.length) return; state.laps.pop(); save(); render(); };
-  const reset=()=>{ stop(); state.accMs=0; state.lastLapEpoch=0; state.laps=[]; save(); render(); };
-
-  startStop?.addEventListener('click', toggle);
-  lapBtn?.addEventListener('click', lap);
-  undoBtn?.addEventListener('click', undo);
-  resetBtn?.addEventListener('click', reset);
-  targetInp?.addEventListener('input', e=>{ state.target=Math.max(0, e.target.value|0); save(); render(); });
-  trimChk?.addEventListener('change', e=>{ state.trimOutliers=!!e.target.checked; save(); render(); });
-
-  // 印刷：一時的にライト配色＋値テキスト化 → 印刷 → 元に戻す
-  const enterPrintMode = () => { document.body.classList.add('print-mode'); window.print(); };
-  printBtn?.addEventListener('click', enterPrintMode);
-  window.addEventListener('afterprint', ()=>{ document.body.classList.remove('print-mode'); });
-
-  window.addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); if(k==='s') toggle(); else if(k==='l') lap(); else if(k==='u') undo(); else if(k==='r') reset(); });
-
-  setInterval(()=>{ if(state.running) render(); }, 50);
-  load(); render();
+  const lap=()=>{if(!state.running)return;const t=now(),ms=t-state.lastLapEpoch;state.lastLapEpoch=t;state.laps.push(ms);render();};
+  const undo=()=>{if(!state.laps.length)return;state.laps.pop();render();};
+  const reset=()=>{stop();state.accMs=0;state.lastLapEpoch=0;state.laps=[];render();};
+  startStop.addEventListener('click',toggle);lapBtn.addEventListener('click',lap);undoBtn.addEventListener('click',undo);resetBtn.addEventListener('click',reset);
+  targetInp.addEventListener('input',e=>{state.target=Math.max(0,e.target.value|0);render()});trimChk.addEventListener('change',e=>{state.trimOutliers=!!e.target.checked;render()});
+  setInterval(()=>{if(state.running)render()},50);render();
 })();
 </script>
 </body>
