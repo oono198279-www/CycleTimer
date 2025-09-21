@@ -1,33 +1,17 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
-  <title>CycleTimer</title>
-
-  <!-- PWA manifest -->
-  <link rel="manifest" href="manifest.webmanifest">
-
-  <!-- iOS用アイコン指定（Safariはmanifestだけでは拾わない） -->
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
-  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" sizes="512x512" href="icons/icon-512.png">
-
-  <!-- iOS用のステータスバー色設定（お好みで） -->
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
-<title>CycleTimer — ラップでCT予測</title>
-
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+<title>CycleTimer<br>ラップでCT予測</title>
 <style>
   :root{
     --bg:#0b0f12; --card:#11161a; --fg:#e5e7eb; --muted:#9ca3af; --border:#1f2937; --accent:#22c55e;
     --radius:14px; --pad:14px; --gap:12px; --mono: ui-monospace,SFMono-Regular,Menlo,Consolas,"Roboto Mono",monospace;
   }
   *{box-sizing:border-box}
-  html,body{height:100%}
+  html,body{height:100%; -webkit-text-size-adjust:100%;}
   body{margin:0; background:var(--bg); color:var(--fg); font-family:-apple-system,system-ui,"Segoe UI",Roboto,"Helvetica Neue",Arial}
   .wrap{max-width:880px; margin:0 auto; padding:18px}
   header{position:sticky; top:0; background:linear-gradient(180deg, rgba(11,15,18,.98), rgba(11,15,18,.8) 60%, transparent); backdrop-filter: blur(6px); z-index:5}
@@ -41,9 +25,11 @@
   .checkbox-line{display:flex; align-items:center; gap:8px; white-space:nowrap}
   .grow{flex:1}
   .muted{color:var(--muted)}
-  .big{font-size:48px; font-family:var(--mono); letter-spacing:.03em}
+  .big{font-size:clamp(36px, 11vw, 64px); font-family:var(--mono); letter-spacing:.03em}
   .time{font-variant-numeric:tabular-nums}
-  .kpis{display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; margin-top:10px}
+
+  /* ★ KPIは基本2列。幅が足りない時だけ自動で1列へ */
+  .kpis{display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:10px; margin-top:10px}
   .kpi{background:#0d1317; border:1px solid var(--border); border-radius:12px; padding:10px}
   .kpi .label{color:var(--muted); font-size:12px}
   .kpi .val{font-family:var(--mono); font-size:18px; margin-top:4px}
@@ -53,31 +39,22 @@
   .primary{background:var(--accent); color:#052b18; border-color:#0e3f28}
   .warn{background:#ef4444; border-color:#7f1d1d; color:#330707}
   .ghost{background:#0e1418}
-
   .btn-row{display:flex; gap:10px; margin-top:10px}
   .btn-row button{flex:1; text-align:center}
 
+  /* iPhone入力時ズーム対策＆可変幅で1行キープ */
   input[type="number"]{
-    width:140px; background:#0e1418; color:var(--fg); border:1px solid var(--border);
+    width:clamp(100px, 30vw, 140px);
+    background:#0e1418; color:var(--fg); border:1px solid var(--border);
     padding:10px 12px; border-radius:10px; font-family:var(--mono); font-size:16px;
   }
   input[type="checkbox"]{transform:scale(1.2)}
-  /* iOSが勝手に文字を拡大するのを抑止 */
-  html, body { -webkit-text-size-adjust: 100%; }
-  
-  /* 横スクロールが出るのを防止 */
-  html, body { overflow-x: hidden; }
-  
-  /* 大きな時間表示が画面幅で可変（デカすぎ防止） */
-  .big { font-size: clamp(36px, 11vw, 64px); }
-  
-  /* 極小画面（iPhone SE等）での詰まり解消 */
-  @media (max-width: 420px) {
-    .kpis { grid-template-columns: 1fr; }          /* KPIを1列に */
-    input[type="number"] { width: 120px; }         /* Target欄を少し細く */
-    .btn-row button { padding: 12px 6px; }         /* ボタン内余白を調整 */
-    .wrap { padding-left: 12px; padding-right: 12px; }
-  }
+
+  table{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-family:var(--mono)}
+  th,td{padding:8px 10px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap}
+  th:first-child, td:first-child{text-align:left}
+  .best{color:#22c55e}
+  .worst{color:#ef4444}
 </style>
 </head>
 <body>
@@ -88,7 +65,7 @@
       <section class="card">
         <div class="row"><div class="big time" id="display">0'00"00</div></div>
 
-        <!-- Target 行とチェック行を nowrap 固定 -->
+        <!-- Target行＆チェック行：基本は一列で収める -->
         <div class="row nowrap" style="margin-top:10px">
           <label class="row nowrap" style="gap:8px">
             <span>Target（目標回数）</span>
@@ -101,29 +78,32 @@
           </label>
         </div>
 
+        <!-- KPI：1段目 -->
         <div class="kpis">
           <div class="kpi"><div class="label">現在回数</div><div class="val" id="count">0</div></div>
           <div class="kpi"><div class="label">平均CT</div><div class="val time" id="avg">–</div></div>
         </div>
-
+        <!-- KPI：2段目（合計ETAは常に行フル幅） -->
         <div class="kpis">
-          <div class="kpi" style="grid-column: span 2;">
+          <div class="kpi" style="grid-column:1 / -1">
             <div class="label">目標回数までの到達予測時間（合計）</div>
             <div class="val time" id="etaTotal">–</div>
           </div>
         </div>
-
+        <!-- KPI：3段目 -->
         <div class="kpis">
           <div class="kpi"><div class="label">最短CT</div><div class="val time" id="min">–</div></div>
           <div class="kpi"><div class="label">最長CT</div><div class="val time" id="max">–</div></div>
         </div>
 
+        <!-- 操作ボタン -->
         <div class="btn-row">
           <button id="startStop" class="primary">Start</button>
           <button id="resetBtn" class="warn">Reset</button>
           <button id="undoBtn" class="ghost" disabled>Undo</button>
           <button id="lapBtn" disabled>Lap</button>
         </div>
+
         <div class="row" style="margin-top:10px">
           <button id="printBtn" class="ghost">Print (PDF保存)</button>
         </div>
@@ -149,20 +129,55 @@
         undoBtn=$('#undoBtn'),resetBtn=$('#resetBtn'),targetInp=$('#target'),
         trimChk=$('#trimOutliers'),countEl=$('#count'),avgEl=$('#avg'),
         minEl=$('#min'),maxEl=$('#max'),etaTotalEl=$('#etaTotal'),tblBody=$('#lapsTbl tbody');
+
   const pad=(n,w=2)=>String(n).padStart(w,'0');
-  const fmtHMSms=ms=>{if(!isFinite(ms)||ms<0)ms=0;const totalCs=Math.floor(ms/10),cs=totalCs%100,totalSec=Math.floor(totalCs/100);const s=totalSec%60,m=Math.floor(totalSec/60)%60,h=Math.floor(totalSec/3600);return (h>0?`${h}:`:'')+ (h>0?pad(m):m)+"'"+pad(s)+'"'+pad(cs);};
+  const fmtHMSms=ms=>{ if(!isFinite(ms)||ms<0)ms=0;
+    const csT=Math.floor(ms/10), cs=csT%100, sT=Math.floor(csT/100), s=sT%60, mT=Math.floor(sT/60), m=mT%60, h=Math.floor(mT/60);
+    return (h>0?`${h}:`:'') + (h>0?pad(m):m) + `'` + pad(s) + `"` + pad(cs);
+  };
   const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
   const now=()=>Date.now();
-  const render=()=>{const live=state.accMs+(state.running?now()-state.startEpoch:0);display.textContent=fmtHMSms(live);tblBody.innerHTML='';let cum=0;const min=Math.min(...(state.laps.length?state.laps:[NaN])),max=Math.max(...(state.laps.length?state.laps:[NaN]));state.laps.forEach((lap,i)=>{cum+=lap;const tr=document.createElement('tr');tr.innerHTML=`<td>#${i+1}</td><td>${fmtHMSms(lap)}</td><td>${fmtHMSms(cum)}</td>`;tblBody.appendChild(tr)});const avg=mean(state.laps);countEl.textContent=state.laps.length;avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';minEl.textContent=isFinite(min)?fmtHMSms(min):'–';maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';etaTotalEl.textContent=isFinite(avg)?fmtHMSms(avg*state.target):'–';startStop.textContent=state.running?'Stop':'Start';lapBtn.disabled=!state.running;undoBtn.disabled=!state.laps.length;targetInp.value=state.target;trimChk.checked=state.trimOutliers;};
-  const start=()=>{if(state.running)return;state.running=true;state.startEpoch=now();state.lastLapEpoch=state.startEpoch;render();};
-  const stop=()=>{if(!state.running)return;state.accMs+=now()-state.startEpoch;state.running=false;render();};
+
+  const render=()=>{
+    const live=state.accMs+(state.running?now()-state.startEpoch:0);
+    display.textContent=fmtHMSms(live);
+
+    // テーブル
+    tblBody.innerHTML=''; let cum=0;
+    const min=Math.min(...(state.laps.length?state.laps:[NaN])), max=Math.max(...(state.laps.length?state.laps:[NaN]));
+    state.laps.forEach((lap,i)=>{ cum+=lap; const tr=document.createElement('tr');
+      tr.innerHTML=`<td>#${i+1}</td><td>${fmtHMSms(lap)}</td><td>${fmtHMSms(cum)}</td>`; tblBody.appendChild(tr); });
+
+    // KPI
+    const avg=mean(state.laps);
+    countEl.textContent=state.laps.length;
+    avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';
+    minEl.textContent=isFinite(min)?fmtHMSms(min):'–';
+    maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';
+    etaTotalEl.textContent=isFinite(avg)?fmtHMSms(avg*state.target):'–';
+
+    // ボタンと入力
+    startStop.textContent=state.running?'Stop':'Start';
+    lapBtn.disabled=!state.running; undoBtn.disabled=!state.laps.length;
+    targetInp.value=state.target; trimChk.checked=state.trimOutliers;
+  };
+
+  const start=()=>{ if(state.running)return; state.running=true; state.startEpoch=now(); state.lastLapEpoch=state.startEpoch; render(); };
+  const stop =()=>{ if(!state.running)return; state.accMs+=now()-state.startEpoch; state.running=false; render(); };
   const toggle=()=>state.running?stop():start();
-  const lap=()=>{if(!state.running)return;const t=now(),ms=t-state.lastLapEpoch;state.lastLapEpoch=t;state.laps.push(ms);render();};
-  const undo=()=>{if(!state.laps.length)return;state.laps.pop();render();};
-  const reset=()=>{stop();state.accMs=0;state.lastLapEpoch=0;state.laps=[];render();};
-  startStop.addEventListener('click',toggle);lapBtn.addEventListener('click',lap);undoBtn.addEventListener('click',undo);resetBtn.addEventListener('click',reset);
-  targetInp.addEventListener('input',e=>{state.target=Math.max(0,e.target.value|0);render()});trimChk.addEventListener('change',e=>{state.trimOutliers=!!e.target.checked;render()});
-  setInterval(()=>{if(state.running)render()},50);render();
+  const lap  =()=>{ if(!state.running)return; const t=now(),ms=t-state.lastLapEpoch; state.lastLapEpoch=t; state.laps.push(ms); render(); };
+  const undo =()=>{ if(!state.laps.length)return; state.laps.pop(); render(); };
+  const reset=()=>{ stop(); state.accMs=0; state.lastLapEpoch=0; state.laps=[]; render(); };
+
+  startStop.addEventListener('click',toggle);
+  lapBtn.addEventListener('click',lap);
+  undoBtn.addEventListener('click',undo);
+  resetBtn.addEventListener('click',reset);
+  targetInp.addEventListener('input',e=>{ state.target=Math.max(0,e.target.value|0); render(); });
+  trimChk.addEventListener('change',e=>{ state.trimOutliers=!!e.target.checked; render(); });
+
+  setInterval(()=>{ if(state.running) render(); }, 50);
+  render();
 })();
 </script>
 </body>
