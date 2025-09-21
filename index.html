@@ -205,6 +205,9 @@
   const display=$('#display'), startStop=$('#startStop'), lapBtn=$('#lapBtn'), undoBtn=$('#undoBtn'), resetBtn=$('#resetBtn');
   const targetInp=$('#target'), trimChk=$('#trimOutliers'), countEl=$('#count'), avgEl=$('#avg'), minEl=$('#min'), maxEl=$('#max'), etaTotalEl=$('#etaTotal');
   const tblBody=$('#lapsTbl tbody'), hint=$('#hint'), printBtn=$('#printBtn');
+  
+  const targetPrint = document.getElementById('targetPrint');
+  const trimPrintVal = document.getElementById('trimPrintVal');
 
   const pad=(n,w=2)=>String(n).padStart(w,'0');
   // h:mm'ss"cc（h=0は省略）
@@ -247,6 +250,9 @@
 
     startStop.textContent=state.running?'Stop':'Start';
     lapBtn.disabled=!state.running; undoBtn.disabled=state.laps.length===0; targetInp.value=state.target; trimChk.checked=state.trimOutliers;
+    // 印刷用のテキストへ同期
+    if (targetPrint) targetPrint.textContent = String(state.target);
+    if (trimPrintVal) trimPrintVal.textContent = state.trimOutliers ? 'はい' : 'いいえ';
   };
 
   const start=()=>{ if(state.running) return; state.running=true; state.startEpoch=now(); state.lastLapEpoch=state.startEpoch; save(); render(); };
