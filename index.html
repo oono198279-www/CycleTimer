@@ -1,23 +1,12 @@
 <!doctype html>
 <html lang="ja">
 <head>
-  
-<!-- 追加：manifest & PWA色 -->
-<link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#0b0f12">
-<!-- iOS向け（ホーム画面アイコン & スタンドアロン表示） -->
-<link rel="apple-touch-icon" href="icons/icon-180.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
 <title>CycleTimer — ラップでCT予測</title>
 
-<!-- ★ 後でPWA化するときに有効化
-<link rel="manifest" href="./manifest.webmanifest">
-<meta name="theme-color" content="#0b0f12">
--->
+<!-- PWA化するなら有効化 -->
+<!-- <link rel="manifest" href="./manifest.webmanifest"><meta name="theme-color" content="#0b0f12"> -->
 
 <style>
   :root{
@@ -51,11 +40,10 @@
   .warn{background:#ef4444; border-color:#7f1d1d; color:#330707}
   .ghost{background:#0e1418}
 
-  /* ボタン列（均等幅） */
   .btn-row{display:flex; gap:10px; margin-top:10px}
   .btn-row button{flex:1; text-align:center}
 
-  /* iPhoneの入力時ズーム対策：font-size>=16px */
+  /* iPhoneの入力時ズーム対策 */
   input[type="number"], input[type="text"]{
     width:100%; background:#0e1418; color:var(--fg); border:1px solid var(--border);
     padding:10px 12px; border-radius:10px; font-family:var(--mono); font-size:16px;
@@ -71,44 +59,34 @@
 
   footer{margin:20px 0 10px; color:var(--muted); font-size:12px}
 
-  /* ---- 印刷用（PDF保存時） ---- */
-　@media print {
-　  /* 色の自動調整を止めて、こちらの指定を使わせる */
-　  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-　
-　  body { background:#fff !important; color:#000 !important; }
-　  header { position: static; background: transparent !important; }
-　  .wrap { padding: 0 10mm; }
-　
-　  /* カード/KPIは白背景+黒文字に統一 */
-　  .card, .kpi { background:#fff !important; color:#000 !important; }
-　  .card { border: 1px solid #bbb !important; }
-　  .kpi { border: 1px solid #bbb !important; }
-　  .kpi .label, .kpi .val { color:#000 !important; }
-　
-　  /* テーブルも白黒で */
-　  table, th, td { color:#000 !important; border-color:#bbb !important; }
-　  #lapsTbl { page-break-inside: auto; }
-　  #lapsTbl tr { page-break-inside: avoid; page-break-after: auto; }
-　  .scroll-print { max-height: none !important; overflow: visible !important; }
-　
-　  /* ベスト/ワーストは印刷用の落ち着いた色に */
-　  .best { color:#0a7d28 !important; }
-　  .worst { color:#a31212 !important; }
-　
-　  /* 画面用の操作UIは非表示（Start/Lap等・印刷ボタン） */
-　  #startStop, #lapBtn, #undoBtn, #resetBtn, #printBtn { display:none !important; }
-　
-　  /* フォーム要素は印刷に不向き → 隠してテキスト版を表示 */
-　  .screen-only { display:none !important; }
-　  .print-only  { display:inline !important; }
-　
-　  /* 入力欄が残る場合の保険（念のため） */
-　  input, button, select, label {
-　    background:#fff !important; color:#000 !important; border-color:#000 !important;
-　    -webkit-appearance: none !important; appearance: none !important;
-　  }
-　}
+  /* --- 画面/印刷切替のためのユーティリティ --- */
+  .print-only{display:none}
+  .screen-only{display:inline}
+
+  /* ===== 印刷モード：印刷直前だけ JS で body に付与 ===== */
+  body.print-mode{
+    --bg:#ffffff; --card:#ffffff; --fg:#000000; --muted:#222; --border:#bbbbbb;
+    background:#fff !important; color:#000 !important;
+  }
+  body.print-mode header{position:static; background:transparent}
+  body.print-mode .card{background:#fff !important; color:#000 !important; border:1px solid #bbb !important}
+  body.print-mode .kpi{background:#fff !important; color:#000 !important; border:1px solid #bbb !important}
+  body.print-mode .kpi .label, body.print-mode .kpi .val{color:#000 !important}
+  body.print-mode table, body.print-mode th, body.print-mode td{color:#000 !important; border-color:#bbb !important}
+  body.print-mode .best{color:#0a7d28 !important}
+  body.print-mode .worst{color:#a31212 !important}
+  /* ラップ一覧は印刷時は全展開 */
+  body.print-mode .scroll-print{max-height:none !important; overflow:visible !important}
+  /* 画面の操作ボタンは印刷に出さない */
+  body.print-mode #startStop,
+  body.print-mode #lapBtn,
+  body.print-mode #undoBtn,
+  body.print-mode #resetBtn,
+  body.print-mode #printBtn{display:none !important}
+
+  /* フォームを隠し、値だけ見せる */
+  body.print-mode .screen-only{display:none !important}
+  body.print-mode .print-only{display:inline !important}
 </style>
 </head>
 <body>
@@ -118,36 +96,32 @@
     </header>
 
     <div class="grid">
-      <!-- 左：計測＆表示 -->
       <section class="card">
-        <div class="row">
-          <div class="big time" id="display">0'00"00</div>
-        </div>
+        <div class="row"><div class="big time" id="display">0'00"00</div></div>
 
         <div class="row" style="margin-top:10px">
           <label class="row" style="gap:8px">
-　　　　　　　  <span>Target（目標回数）</span>
-　　　　　　　  <!-- 画面用 -->
-　　　　　　　  <input id="target" class="screen-only" type="number" inputmode="numeric" pattern="\\d*" min="0" step="1" value="100" style="width:140px">
-　　　　　　　  <!-- 印刷用（値だけ見せる） -->
-　　　　　　　  <span id="targetPrint" class="print-only" style="display:none; font-family:var(--mono); padding:8px 10px; border:1px solid #bbb; border-radius:8px;">100</span>
-　　　　　　　</label>
+            <span>Target（目標回数）</span>
+            <!-- 画面用 -->
+            <input id="target" class="screen-only" type="number" inputmode="numeric" pattern="\\d*" min="0" step="1" value="100" style="width:140px">
+            <!-- 印刷用（値だけ） -->
+            <span id="targetPrint" class="print-only" style="font-family:var(--mono); padding:8px 10px; border:1px solid #bbb; border-radius:8px;">100</span>
+          </label>
           <div class="grow"></div>
-          <!-- チェックボックスも印刷では文字化 -->
-　　　　　　　<label class="row" style="gap:8px">
-　　　　　　　  <input type="checkbox" id="trimOutliers" class="screen-only">
-　　　　　　　  <span class="muted screen-only">外れ値を自動除外（IQR方式）</span>
-　　　　　　　  <span id="trimPrint" class="print-only" style="display:none;">外れ値を自動除外：<strong id="trimPrintVal">いいえ</strong></span>
-　　　　　　　</label>
+          <!-- 画面用チェック -->
+          <label class="row screen-only" style="gap:8px">
+            <input type="checkbox" id="trimOutliers">
+            <span class="muted">外れ値を自動除外（IQR方式）</span>
+          </label>
+          <!-- 印刷用テキスト -->
+          <span class="print-only" id="trimPrint">外れ値を自動除外：<strong id="trimPrintVal">いいえ</strong></span>
         </div>
 
-        <!-- 1段目：現在回数／平均CT -->
         <div class="kpis">
           <div class="kpi"><div class="label">現在回数</div><div class="val" id="count">0</div></div>
           <div class="kpi"><div class="label">平均CT</div><div class="val time" id="avg">–</div></div>
         </div>
 
-        <!-- 2段目：合計の到達予測時間（目標回数 × 平均CT） -->
         <div class="kpis">
           <div class="kpi" style="grid-column: span 2;">
             <div class="label">目標回数までの到達予測時間（合計）</div>
@@ -155,13 +129,11 @@
           </div>
         </div>
 
-        <!-- 3段目：最短／最長 -->
         <div class="kpis">
           <div class="kpi"><div class="label">最短CT</div><div class="val time" id="min">–</div></div>
           <div class="kpi"><div class="label">最長CT</div><div class="val time" id="max">–</div></div>
         </div>
 
-        <!-- ★ 操作ボタン列（Start・Resetの順に変更 / Lapは右端） -->
         <div class="btn-row">
           <button id="startStop" class="primary">Start</button>
           <button id="resetBtn" class="warn">Reset</button>
@@ -175,7 +147,6 @@
         </div>
       </section>
 
-      <!-- 右：ラップ一覧 -->
       <section class="card">
         <div class="row">
           <h3 style="margin:0">ラップ一覧</h3>
@@ -203,14 +174,12 @@
 
   const $ = s => document.querySelector(s);
   const display=$('#display'), startStop=$('#startStop'), lapBtn=$('#lapBtn'), undoBtn=$('#undoBtn'), resetBtn=$('#resetBtn');
-  const targetInp=$('#target'), trimChk=$('#trimOutliers'), countEl=$('#count'), avgEl=$('#avg'), minEl=$('#min'), maxEl=$('#max'), etaTotalEl=$('#etaTotal');
+  const targetInp=$('#target'), trimChk=$('#trimOutliers');
+  const countEl=$('#count'), avgEl=$('#avg'), minEl=$('#min'), maxEl=$('#max'), etaTotalEl=$('#etaTotal');
   const tblBody=$('#lapsTbl tbody'), hint=$('#hint'), printBtn=$('#printBtn');
-  
-  const targetPrint = document.getElementById('targetPrint');
-  const trimPrintVal = document.getElementById('trimPrintVal');
+  const targetPrint=$('#targetPrint'), trimPrintVal=$('#trimPrintVal');
 
   const pad=(n,w=2)=>String(n).padStart(w,'0');
-  // h:mm'ss"cc（h=0は省略）
   const fmtHMSms = ms => {
     if (!isFinite(ms) || ms < 0) ms = 0;
     const totalCs=Math.floor(ms/10), cs=totalCs%100, totalSec=Math.floor(totalCs/100);
@@ -227,7 +196,7 @@
   };
   const now=()=>Date.now();
 
-  const KEY='cycletimer:v6';
+  const KEY='cycletimer:v7';
   const save=()=>localStorage.setItem(KEY, JSON.stringify({
     running:state.running, accMs:state.accMs+(state.running?now()-state.startEpoch:0),
     laps:state.laps, target:state.target, trimOutliers:state.trimOutliers
@@ -249,8 +218,10 @@
     etaTotalEl.textContent=(isFinite(avg)&&Number.isFinite(state.target))?fmtHMSms(avg*(state.target|0)):'–';
 
     startStop.textContent=state.running?'Stop':'Start';
-    lapBtn.disabled=!state.running; undoBtn.disabled=state.laps.length===0; targetInp.value=state.target; trimChk.checked=state.trimOutliers;
-    // 印刷用のテキストへ同期
+    lapBtn.disabled=!state.running; undoBtn.disabled=state.laps.length===0;
+    if(targetInp) targetInp.value=state.target; if(trimChk) trimChk.checked=state.trimOutliers;
+
+    // 印刷用値に同期
     if (targetPrint) targetPrint.textContent = String(state.target);
     if (trimPrintVal) trimPrintVal.textContent = state.trimOutliers ? 'はい' : 'いいえ';
   };
@@ -262,31 +233,23 @@
   const undo =()=>{ if(!state.laps.length) return; state.laps.pop(); save(); render(); };
   const reset=()=>{ stop(); state.accMs=0; state.lastLapEpoch=0; state.laps=[]; save(); render(); };
 
-  startStop.addEventListener('click', toggle);
-  lapBtn.addEventListener('click', lap);
-  undoBtn.addEventListener('click', undo);
-  resetBtn.addEventListener('click', reset);
-  targetInp.addEventListener('input', e=>{ state.target=Math.max(0, e.target.value|0); save(); render(); });
-  trimChk.addEventListener('change', e=>{ state.trimOutliers=!!e.target.checked; save(); render(); });
-  printBtn.addEventListener('click', ()=>window.print());
+  startStop?.addEventListener('click', toggle);
+  lapBtn?.addEventListener('click', lap);
+  undoBtn?.addEventListener('click', undo);
+  resetBtn?.addEventListener('click', reset);
+  targetInp?.addEventListener('input', e=>{ state.target=Math.max(0, e.target.value|0); save(); render(); });
+  trimChk?.addEventListener('change', e=>{ state.trimOutliers=!!e.target.checked; save(); render(); });
+
+  // 印刷：一時的にライト配色＋値テキスト化 → 印刷 → 元に戻す
+  const enterPrintMode = () => { document.body.classList.add('print-mode'); window.print(); };
+  printBtn?.addEventListener('click', enterPrintMode);
+  window.addEventListener('afterprint', ()=>{ document.body.classList.remove('print-mode'); });
 
   window.addEventListener('keydown', e=>{ const k=e.key.toLowerCase(); if(k==='s') toggle(); else if(k==='l') lap(); else if(k==='u') undo(); else if(k==='r') reset(); });
 
   setInterval(()=>{ if(state.running) render(); }, 50);
   load(); render();
 })();
-</script>
-
-<!-- ★ 後でPWA化：
-1) manifest.webmanifest を作成し、上の <link rel="manifest"> を有効化
-2) sw.js を用意して navigator.serviceWorker.register('./sw.js') を追加
--->
-<script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('./sw.js').catch(console.error);
-    });
-  }
 </script>
 </body>
 </html>
