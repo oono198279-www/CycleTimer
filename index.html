@@ -55,6 +55,33 @@
   th:first-child, td:first-child{text-align:left}
   .best{color:#22c55e}
   .worst{color:#ef4444}
+  /* ===== 超小幅端末向けフォールバック（横スクロール防止） ===== */
+  @media (max-width: 390px) {
+    /* Target 行＆チェック行は折り返し許可に切替 */
+    .nowrap { flex-wrap: wrap !important; }
+  
+    /* Target入力は行幅に合わせて広げる */
+    input[type="number"] {
+      width: 100%;
+      max-width: 260px;
+    }
+  
+    /* チェックボックス説明は改行OKにして詰める */
+    .checkbox-line {
+      white-space: normal;
+      gap: 6px;
+    }
+  
+    /* KPIの最小幅を少しだけ下げて2列維持しやすく */
+    .kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  
+    /* ボタンの内側余白とフォントを少しだけ縮める */
+    .btn-row button { padding: 10px 8px; font-size: 15px; }
+    .wrap { padding-left: 12px; padding-right: 12px; }
+  }
+  
+  /* iOSの文字自動拡大で太るのを抑止（既に入れてなければ） */
+  html, body { -webkit-text-size-adjust: 100%; }
 </style>
 </head>
 <body>
