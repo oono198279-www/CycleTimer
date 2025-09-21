@@ -5,11 +5,11 @@
 <meta name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
 <title>CycleTimer-ラップでCT予測</title>
-  <!-- PWA / アイコン -->
-  <link rel="manifest" href="./manifest.webmanifest?v=4">
-  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=4">
-  <link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=4">
-  <meta name="theme-color" content="#0b0f12">
+<!-- PWA / アイコン -->
+<link rel="manifest" href="./manifest.webmanifest?v=4">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png?v=4">
+<link rel="apple-touch-icon" sizes="180x180" href="./icons/icon-180.png?v=4">
+<meta name="theme-color" content="#0b0f12">
 
 <style>
   :root{
@@ -59,35 +59,19 @@
   table{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-family:var(--mono)}
   th,td{padding:8px 10px; border-bottom:1px solid var(--border); text-align:right; white-space:nowrap}
   th:first-child, td:first-child{text-align:left}
-  .best{color:#22c55e}
-  .worst{color:#ef4444}
+
+  /* 外れ値の見た目（平均計算からは除外・行は半透明で残す） */
+  .excluded { opacity:.45; }
+
   /* ===== 超小幅端末向けフォールバック（横スクロール防止） ===== */
   @media (max-width: 390px) {
-    /* Target 行＆チェック行は折り返し許可に切替 */
     .nowrap { flex-wrap: wrap !important; }
-  
-    /* Target入力は行幅に合わせて広げる */
-    input[type="number"] {
-      width: 100%;
-      max-width: 260px;
-    }
-  
-    /* チェックボックス説明は改行OKにして詰める */
-    .checkbox-line {
-      white-space: normal;
-      gap: 6px;
-    }
-  
-    /* KPIの最小幅を少しだけ下げて2列維持しやすく */
+    input[type="number"] { width:100%; max-width:260px; }
+    .checkbox-line { white-space:normal; gap:6px; }
     .kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-  
-    /* ボタンの内側余白とフォントを少しだけ縮める */
-    .btn-row button { padding: 10px 8px; font-size: 15px; }
-    .wrap { padding-left: 12px; padding-right: 12px; }
+    .btn-row button { padding:10px 8px; font-size:15px; }
+    .wrap { padding-left:12px; padding-right:12px; }
   }
-  
-  /* iOSの文字自動拡大で太るのを抑止（既に入れてなければ） */
-  html, body { -webkit-text-size-adjust: 100%; }
 </style>
 </head>
 <body>
@@ -136,7 +120,6 @@
           <button id="undoBtn" class="ghost" disabled>Undo</button>
           <button id="lapBtn" disabled>Lap</button>
         </div>
-
       </section>
 
       <section class="card">
@@ -168,21 +151,47 @@
   const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
   const now=()=>Date.now();
 
+  // IQR境界（lo/hi）を返す。データが少ないときは null。
+  const iqrBounds = (arr) => {
+    if (!arr || arr.length < 4) return null;
+    const s = arr.slice().sort((a,b)=>a-b);
+    const q = (p) => {
+      const pos = (s.length - 1) * p;
+      const b = Math.floor(pos), r = pos - b;
+      return r ? s[b] + (s[b+1]-s[b]) * r : s[b];
+    };
+    const q1 = q(0.25), q3 = q(0.75), iqr = q3 - q1;
+    return { lo: q1 - 1.5*iqr, hi: q3 + 1.5*iqr };
+  };
+
   const render=()=>{
     const live=state.accMs+(state.running?now()-state.startEpoch:0);
     display.textContent=fmtHMSms(live);
 
-    // テーブル
+    // IQR境界と、平均計算に使う配列
+    const bounds = state.trimOutliers ? iqrBounds(state.laps) : null;
+    const lapsForAvg = bounds ? state.laps.filter(v => v >= bounds.lo && v <= bounds.hi) : state.laps;
+
+    // テーブル（外れ値は半透明で表示）
     tblBody.innerHTML=''; let cum=0;
-    const min=Math.min(...(state.laps.length?state.laps:[NaN])), max=Math.max(...(state.laps.length?state.laps:[NaN]));
-    state.laps.forEach((lap,i)=>{ cum+=lap; const tr=document.createElement('tr');
-      tr.innerHTML=`<td>#${i+1}</td><td>${fmtHMSms(lap)}</td><td>${fmtHMSms(cum)}</td>`; tblBody.appendChild(tr); });
+    state.laps.forEach((lap,i)=>{
+      cum+=lap;
+      const excluded = !!(bounds && (lap < bounds.lo || lap > bounds.hi));
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>#${i+1}</td>
+                    <td class="${excluded?'excluded':''}">${fmtHMSms(lap)}</td>
+                    <td>${fmtHMSms(cum)}</td>`;
+      tblBody.appendChild(tr);
+    });
 
     // KPI
-    const avg=mean(state.laps);
+    const min=Math.min(...(state.laps.length?state.laps:[NaN]));
+    const max=Math.max(...(state.laps.length?state.laps:[NaN]));
+    const avg=mean(lapsForAvg);
+
     countEl.textContent=state.laps.length;
     avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';
-    minEl.textContent=isFinite(min)?fmtHMSms(min):'–';
+    minEl.textContent=isFinite(min)?fmtHMSms(min):'–';   // 最短/最長は生データ基準のまま
     maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';
     etaTotalEl.textContent=isFinite(avg)?fmtHMSms(avg*state.target):'–';
 
