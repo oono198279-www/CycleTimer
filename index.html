@@ -72,16 +72,43 @@
   footer{margin:20px 0 10px; color:var(--muted); font-size:12px}
 
   /* ---- 印刷用（PDF保存時） ---- */
-  @media print {
-    header { position: static; background: transparent; }
-    .wrap { padding: 0 10mm; }
-    .card { border: 1px solid #ccc; background: #fff; color:#000; }
-    body { background: #fff; color:#000; }
-    #lapsTbl { page-break-inside: auto; }
-    #lapsTbl tr { page-break-inside: avoid; page-break-after: auto; }
-    .scroll-print { max-height: none !important; overflow: visible !important; }
-    #startStop, #lapBtn, #undoBtn, #resetBtn, #printBtn { display:none !important; }
-  }
+　@media print {
+　  /* 色の自動調整を止めて、こちらの指定を使わせる */
+　  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+　
+　  body { background:#fff !important; color:#000 !important; }
+　  header { position: static; background: transparent !important; }
+　  .wrap { padding: 0 10mm; }
+　
+　  /* カード/KPIは白背景+黒文字に統一 */
+　  .card, .kpi { background:#fff !important; color:#000 !important; }
+　  .card { border: 1px solid #bbb !important; }
+　  .kpi { border: 1px solid #bbb !important; }
+　  .kpi .label, .kpi .val { color:#000 !important; }
+　
+　  /* テーブルも白黒で */
+　  table, th, td { color:#000 !important; border-color:#bbb !important; }
+　  #lapsTbl { page-break-inside: auto; }
+　  #lapsTbl tr { page-break-inside: avoid; page-break-after: auto; }
+　  .scroll-print { max-height: none !important; overflow: visible !important; }
+　
+　  /* ベスト/ワーストは印刷用の落ち着いた色に */
+　  .best { color:#0a7d28 !important; }
+　  .worst { color:#a31212 !important; }
+　
+　  /* 画面用の操作UIは非表示（Start/Lap等・印刷ボタン） */
+　  #startStop, #lapBtn, #undoBtn, #resetBtn, #printBtn { display:none !important; }
+　
+　  /* フォーム要素は印刷に不向き → 隠してテキスト版を表示 */
+　  .screen-only { display:none !important; }
+　  .print-only  { display:inline !important; }
+　
+　  /* 入力欄が残る場合の保険（念のため） */
+　  input, button, select, label {
+　    background:#fff !important; color:#000 !important; border-color:#000 !important;
+　    -webkit-appearance: none !important; appearance: none !important;
+　  }
+　}
 </style>
 </head>
 <body>
