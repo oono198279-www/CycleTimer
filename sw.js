@@ -1,5 +1,5 @@
 // sw.js
-const CACHE_NAME = 'cycletimer-v1';
+const CACHE_NAME = 'cycletimer-v2';
 const ASSETS = [
   './',
   './index.html',
