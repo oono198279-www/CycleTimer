@@ -125,13 +125,20 @@
         </div>
 
         <div class="row" style="margin-top:10px">
-          <label class="row" style="gap:8px"><span>Target（目標回数）</span>
-            <input id="target" type="number" inputmode="numeric" pattern="\\d*" min="0" step="1" value="100" style="width:140px">
-          </label>
+          <label class="row" style="gap:8px">
+　　　　　　　  <span>Target（目標回数）</span>
+　　　　　　　  <!-- 画面用 -->
+　　　　　　　  <input id="target" class="screen-only" type="number" inputmode="numeric" pattern="\\d*" min="0" step="1" value="100" style="width:140px">
+　　　　　　　  <!-- 印刷用（値だけ見せる） -->
+　　　　　　　  <span id="targetPrint" class="print-only" style="display:none; font-family:var(--mono); padding:8px 10px; border:1px solid #bbb; border-radius:8px;">100</span>
+　　　　　　　</label>
           <div class="grow"></div>
-          <label class="row" style="gap:8px"><input type="checkbox" id="trimOutliers">
-            <span class="muted">外れ値を自動除外（IQR方式）</span>
-          </label>
+          <!-- チェックボックスも印刷では文字化 -->
+　　　　　　　<label class="row" style="gap:8px">
+　　　　　　　  <input type="checkbox" id="trimOutliers" class="screen-only">
+　　　　　　　  <span class="muted screen-only">外れ値を自動除外（IQR方式）</span>
+　　　　　　　  <span id="trimPrint" class="print-only" style="display:none;">外れ値を自動除外：<strong id="trimPrintVal">いいえ</strong></span>
+　　　　　　　</label>
         </div>
 
         <!-- 1段目：現在回数／平均CT -->
