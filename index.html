@@ -62,6 +62,8 @@
 
   /* 外れ値の見た目（平均計算からは除外・行は半透明で残す） */
   .excluded { opacity:.45; }
+  .del{border:1px solid var(--border); background:#0d1317; color:var(--fg); width:28px; height:28px; border-radius:8px; font-size:18px; line-height:24px; cursor:pointer}
+  .del:active{transform:scale(0.98)}
 
   /* ===== 超小幅端末向けフォールバック（横スクロール防止） ===== */
   @media (max-width: 390px) {
@@ -72,6 +74,12 @@
     .btn-row button { padding:10px 8px; font-size:15px; }
     .wrap { padding-left:12px; padding-right:12px; }
   }
+
+/* Settings grid: keep Resource and Availability side-by-side on mobile */
+.settings-grid{display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; align-items:end}
+.field{display:flex; flex-direction:column; gap:6px; min-width:0}
+.field label{font-size:14px; color:var(--muted)}
+.field input{width:100%}
 </style>
 </head>
 <body>
@@ -95,7 +103,25 @@
           </label>
         </div>
 
-        <!-- KPI：1段目 -->
+        
+        
+        <!-- 台数/人数 & 可動率 -->
+        <div class="settings-grid" style="margin-top:10px">
+          <div class="field">
+            <label for="resource">台数/人数</label>
+            <input id="resource" type="number" inputmode="numeric" min="1" step="1" value="1">
+          </div>
+          <div class="field">
+            <label for="availability">可動率（%）</label>
+            <input id="availability" type="number" inputmode="numeric" min="1" max="100" step="1" value="100">
+          </div>
+        </div>
+
+        <div class="muted" style="margin-top:6px; font-size:12px">
+          内部計算：Target ÷ 台数/人数 ／ 合計予測時間を ÷（可動率/100）
+        </div>
+
+<!-- KPI：1段目 -->
         <div class="kpis">
           <div class="kpi"><div class="label">現在回数</div><div class="val" id="count">0</div></div>
           <div class="kpi"><div class="label">平均CT</div><div class="val time" id="avg">–</div></div>
@@ -126,7 +152,7 @@
         <h3 style="margin:0">ラップ一覧</h3>
         <div class="scroll-print" style="overflow:auto; max-height:55vh; margin-top:8px">
           <table id="lapsTbl">
-            <thead><tr><th>#</th><th>Lap</th><th>Cumulative</th></tr></thead>
+            <thead><tr><th>#</th><th>Lap</th><th>Cumulative</th><th></th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
@@ -136,12 +162,23 @@
 
 <script>
 (() => {
-  const state={running:false,startEpoch:0,accMs:0,lastLapEpoch:0,laps:[],target:100,trimOutliers:false};
+  const state={running:false,startEpoch:0,accMs:0,lastLapEpoch:0,laps:[],target:100,resource:1,availability:100,trimOutliers:false};
   const $=s=>document.querySelector(s);
   const display=$('#display'),startStop=$('#startStop'),lapBtn=$('#lapBtn'),
-        undoBtn=$('#undoBtn'),resetBtn=$('#resetBtn'),targetInp=$('#target'),
+        undoBtn=$('#undoBtn'),resetBtn=$('#resetBtn'),targetInp=$('#target'),resourceInp=$('#resource'),availabilityInp=$('#availability'),
         trimChk=$('#trimOutliers'),countEl=$('#count'),avgEl=$('#avg'),
         minEl=$('#min'),maxEl=$('#max'),etaTotalEl=$('#etaTotal'),tblBody=$('#lapsTbl tbody');
+
+  // 行削除（任意のラップを削除）
+  tblBody.addEventListener('click', (e)=>{
+    const btn = e.target.closest && e.target.closest('button.del');
+    if(!btn) return;
+    const i = parseInt(btn.dataset.i, 10);
+    if(Number.isInteger(i) && i>=0 && i<state.laps.length){
+      state.laps.splice(i,1);
+      render();
+    }
+  });
 
   const pad=(n,w=2)=>String(n).padStart(w,'0');
   const fmtHMSms=ms=>{ if(!isFinite(ms)||ms<0)ms=0;
@@ -150,6 +187,17 @@
   };
   const mean=a=>a.length?a.reduce((x,y)=>x+y,0)/a.length:NaN;
   const now=()=>Date.now();
+
+  const setIfNotFocused = (inp, val) => {
+    if(!inp) return;
+    if(document.activeElement === inp) return;
+    inp.value = val;
+  };
+
+  const parseIntSafe = (v) => {
+    const n = parseInt(v, 10);
+    return Number.isFinite(n) ? n : null;
+  };
 
   // IQR境界（lo/hi）を返す。データが少ないときは null。
   const iqrBounds = (arr) => {
@@ -180,7 +228,8 @@
       const tr=document.createElement('tr');
       tr.innerHTML=`<td>#${i+1}</td>
                     <td class="${excluded?'excluded':''}">${fmtHMSms(lap)}</td>
-                    <td>${fmtHMSms(cum)}</td>`;
+                    <td>${fmtHMSms(cum)}</td>
+                    <td><button class="del" data-i="${i}" aria-label="delete">×</button></td>`;
       tblBody.appendChild(tr);
     });
 
@@ -193,12 +242,18 @@
     avgEl.textContent=isFinite(avg)?fmtHMSms(avg):'–';
     minEl.textContent=isFinite(min)?fmtHMSms(min):'–';   // 最短/最長は生データ基準のまま
     maxEl.textContent=isFinite(max)?fmtHMSms(max):'–';
-    etaTotalEl.textContent=isFinite(avg)?fmtHMSms(avg*state.target):'–';
+    const perTarget = state.resource>0 ? (state.target/state.resource) : state.target;
+    const avail = (state.availability>0 ? state.availability : 100) / 100;
+    const etaTotal = isFinite(avg) ? (avg * perTarget / avail) : NaN;
+    etaTotalEl.textContent=isFinite(etaTotal)?fmtHMSms(etaTotal):'–';
 
     // ボタンと入力
     startStop.textContent=state.running?'Stop':'Start';
     lapBtn.disabled=!state.running; undoBtn.disabled=!state.laps.length;
-    targetInp.value=state.target; trimChk.checked=state.trimOutliers;
+    setIfNotFocused(targetInp, state.target);
+    setIfNotFocused(resourceInp, state.resource);
+    setIfNotFocused(availabilityInp, state.availability);
+    trimChk.checked=state.trimOutliers;
   };
 
   const start=()=>{ if(state.running)return; state.running=true; state.startEpoch=now(); state.lastLapEpoch=state.startEpoch; render(); };
@@ -212,7 +267,47 @@
   lapBtn.addEventListener('click',lap);
   undoBtn.addEventListener('click',undo);
   resetBtn.addEventListener('click',reset);
-  targetInp.addEventListener('input',e=>{ state.target=Math.max(0,e.target.value|0); render(); });
+  // Target: 空欄入力中は強制上書きしない（Backspaceで消せない問題の対策）
+  targetInp.addEventListener('input', (e)=>{
+    const n = parseIntSafe(e.target.value);
+    if(n === null) return;
+    state.target = Math.max(0, n);
+    render();
+  });
+  targetInp.addEventListener('blur', (e)=>{
+    const n = parseIntSafe(e.target.value);
+    if(n === null) { setIfNotFocused(targetInp, state.target); return; }
+    state.target = Math.max(0, n);
+    render();
+  });
+  // Resource（台数/人数）: 空欄入力中は強制上書きしない
+  resourceInp.addEventListener('input', (e)=>{
+    const n = parseIntSafe(e.target.value);
+    if(n === null) return;
+    state.resource = Math.max(1, n);
+    render();
+  });
+  resourceInp.addEventListener('blur', (e)=>{
+    const n = parseIntSafe(e.target.value);
+    state.resource = Math.max(1, n ?? state.resource ?? 1);
+    setIfNotFocused(resourceInp, state.resource);
+    render();
+  });
+
+  // 可動率（%）
+  availabilityInp.addEventListener('input', (e)=>{
+    const n = parseIntSafe(e.target.value);
+    if(n === null) return;
+    state.availability = Math.min(100, Math.max(1, n));
+    render();
+  });
+  availabilityInp.addEventListener('blur', (e)=>{
+    const n = parseIntSafe(e.target.value);
+    state.availability = Math.min(100, Math.max(1, n ?? state.availability ?? 100));
+    setIfNotFocused(availabilityInp, state.availability);
+    render();
+  });
+
   trimChk.addEventListener('change',e=>{ state.trimOutliers=!!e.target.checked; render(); });
 
   setInterval(()=>{ if(state.running) render(); }, 50);
