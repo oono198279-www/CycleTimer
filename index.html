@@ -162,7 +162,7 @@
 
 <script>
 (() => {
-  const state={running:false,startEpoch:0,accMs:0,lastLapEpoch:0,laps:[],target:100,resource:1,availability:100,trimOutliers:false};
+  const state={running:false,startEpoch:0,accMs:0,lastLapEpoch:0,justStopped:false,laps:[],target:100,resource:1,availability:100,trimOutliers:false};
   const $=s=>document.querySelector(s);
   const display=$('#display'),startStop=$('#startStop'),lapBtn=$('#lapBtn'),
         undoBtn=$('#undoBtn'),resetBtn=$('#resetBtn'),targetInp=$('#target'),resourceInp=$('#resource'),availabilityInp=$('#availability'),
@@ -256,12 +256,29 @@
     trimChk.checked=state.trimOutliers;
   };
 
-  const start=()=>{ if(state.running)return; state.running=true; state.startEpoch=now(); state.lastLapEpoch=state.startEpoch; render(); };
-  const stop =()=>{ if(!state.running)return; state.accMs+=now()-state.startEpoch; state.running=false; render(); };
+  const start=()=>{
+    if(state.running) return;
+    // Stop後の再Startは「新しい計測開始」：表示(上部)だけ0から再スタート
+    if(state.justStopped){
+      state.accMs = 0; // ラップや統計は保持したまま、上部表示だけリセット
+    }
+    state.justStopped = false;
+    state.running = true;
+    state.startEpoch = now();
+    state.lastLapEpoch = state.startEpoch;
+    render();
+  };
+  const stop =()=>{
+    if(!state.running) return;
+    state.accMs += now() - state.startEpoch;
+    state.running = false;
+    state.justStopped = true;
+    render();
+  };
   const toggle=()=>state.running?stop():start();
   const lap  =()=>{ if(!state.running)return; const t=now(),ms=t-state.lastLapEpoch; state.lastLapEpoch=t; state.laps.push(ms); render(); };
   const undo =()=>{ if(!state.laps.length)return; state.laps.pop(); render(); };
-  const reset=()=>{ stop(); state.accMs=0; state.lastLapEpoch=0; state.laps=[]; render(); };
+  const reset=()=>{ stop(); state.accMs=0; state.lastLapEpoch=0; state.justStopped=false; state.laps=[]; render(); };
 
   startStop.addEventListener('click',toggle);
   lapBtn.addEventListener('click',lap);
