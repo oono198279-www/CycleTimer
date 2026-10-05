@@ -47,6 +47,8 @@
   .ghost{background:#0e1418}
   .btn-row{display:flex; gap:10px; margin-top:10px}
   .btn-row button{flex:1; text-align:center}
+  .lap-btn{background:#facc15; border-color:#a16207; color:#1c1917}
+  .lap-btn:disabled{background:#4a4218; border-color:#6b5f20; color:#c8bb72; cursor:not-allowed; opacity:1}
 
   /* iPhone入力時ズーム対策＆可変幅で1行キープ */
   input[type="number"]{
@@ -144,7 +146,7 @@
           <button id="startStop" class="primary">Start</button>
           <button id="resetBtn" class="warn">Reset</button>
           <button id="undoBtn" class="ghost" disabled>Undo</button>
-          <button id="lapBtn" disabled>Lap</button>
+          <button id="lapBtn" class="lap-btn" disabled>Lap</button>
         </div>
       </section>
 
